@@ -12,15 +12,16 @@ else
 fi
 #echo $dlrm_extra_option
 
-cpu=1
+cpu=0
 gpu=1
 pt=1
-c2=1
+c2=0
 
 ncores=28 #12 #6
 nsockets="0"
 
-ngpus="1 2 4 8"
+# ngpus="1 2 4 8"
+ngpus="8"
 
 numa_cmd="numactl --physcpubind=0-$((ncores-1)) -m $nsockets" #run on one socket, without HT
 dlrm_pt_bin="python dlrm_s_pytorch.py"
@@ -42,6 +43,7 @@ nindices=100
 emb="1000000-1000000-1000000-1000000-1000000-1000000-1000000-1000000"
 interaction="dot"
 tnworkers=0
+nworkers=0
 tmb_size=16384
 
 #_args="--mini-batch-size="${mb_size}\
@@ -55,8 +57,7 @@ _args=" --num-batches="${nbatches}\
 " --arch-interaction-op="${interaction}\
 " --numpy-rand-seed="${rand_seed}\
 " --print-freq="${print_freq}\
-" --print-time"\
-" --enable-profiling "
+" --print-time"
 
 c2_args=" --caffe2-net-type="${c2_net}
 
@@ -72,15 +73,9 @@ if [ $cpu = 1 ]; then
     echo "-------------------------------"
     echo "Running PT (log file: $outf)"
     echo "-------------------------------"
-    cmd="$numa_cmd $dlrm_pt_bin --mini-batch-size=$mb_size --test-mini-batch-size=$tmb_size --test-num-workers=$tnworkers $_args $dlrm_extra_option > $outf"
+    cmd="$dlrm_pt_bin --mini-batch-size=$mb_size --test-mini-batch-size=$tmb_size --test-num-workers=$tnworkers $_args $dlrm_extra_option"
     echo $cmd
     eval $cmd
-    min=$(grep "iteration" $outf | awk 'BEGIN{best=999999} {if (best > $7) best=$7} END{print best}')
-    echo "Min time per iteration = $min"
-    # move profiling file(s)
-    mv $outp ${outf//".log"/".prof"}
-    mv ${outp//".prof"/".json"} ${outf//".log"/".json"}
-
   fi
   if [ $c2 = 1 ]; then
     outf="model1_CPU_C2_$ncores.log"
@@ -120,14 +115,9 @@ if [ $gpu = 1 ]; then
       echo "-------------------------------"
       echo "Running PT (log file: $outf)"
       echo "-------------------------------"
-      cmd="$cuda_arg $dlrm_pt_bin --mini-batch-size=$_mb_size --test-mini-batch-size=$tmb_size --test-num-workers=$tnworkers $_args --use-gpu $dlrm_extra_option > $outf"
+      cmd="$cuda_arg $dlrm_pt_bin --mini-batch-size=$_mb_size --test-mini-batch-size=$tmb_size --test-num-workers=$tnworkers --num-workers=$nworkers $_args --use-gpu $dlrm_extra_option"
       echo $cmd
       eval $cmd
-      min=$(grep "iteration" $outf | awk 'BEGIN{best=999999} {if (best > $7) best=$7} END{print best}')
-      echo "Min time per iteration = $min"
-      # move profiling file(s)
-      mv $outp ${outf//".log"/".prof"}
-      mv ${outp//".prof"/".json"} ${outf//".log"/".json"}
     fi
     if [ $c2 = 1 ]; then
       outf="model1_GPU_C2_$_ng.log"

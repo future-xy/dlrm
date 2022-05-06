@@ -23,6 +23,7 @@ from os import path
 import sys
 import bisect
 import collections
+import time
 
 import data_utils
 
@@ -417,6 +418,7 @@ def collate_wrapper_criteo_length(list_of_tuples):
 
 
 def make_criteo_data_and_loaders(args, offset_to_length_converter=False):
+    inference_only = args.inference_only
     if args.mlperf_logging and args.memory_map and args.data_set == "terabyte":
         # more efficient for larger batches
         data_directory = path.dirname(args.raw_data_file)
@@ -434,28 +436,30 @@ def make_criteo_data_and_loaders(args, offset_to_length_converter=False):
                                                 counts_file]):
                 ensure_dataset_preprocessed(args, d_path)
 
-            train_data = data_loader_terabyte.CriteoBinDataset(
-                data_file=train_file,
-                counts_file=counts_file,
-                batch_size=args.mini_batch_size,
-                max_ind_range=args.max_ind_range
-            )
+            if not inference_only:
+                train_data = data_loader_terabyte.CriteoBinDataset(
+                    data_file=train_file,
+                    counts_file=counts_file,
+                    batch_size=args.mini_batch_size,
+                    max_ind_range=args.max_ind_range
+                )
 
-            mlperf_logger.log_event(key=mlperf_logger.constants.TRAIN_SAMPLES,
-                                    value=train_data.num_samples)
+                mlperf_logger.log_event(key=mlperf_logger.constants.TRAIN_SAMPLES,
+                                        value=train_data.num_samples)
 
-            train_loader = torch.utils.data.DataLoader(
-                train_data,
-                batch_size=None,
-                batch_sampler=None,
-                shuffle=False,
-                num_workers=0,
-                collate_fn=None,
-                pin_memory=False,
-                drop_last=False,
-                sampler=RandomSampler(train_data) if args.mlperf_bin_shuffle else None
-            )
-
+                train_loader = torch.utils.data.DataLoader(
+                    train_data,
+                    batch_size=None,
+                    batch_sampler=None,
+                    shuffle=False,
+                    num_workers=0,
+                    collate_fn=None,
+                    pin_memory=False,
+                    drop_last=False,
+                    sampler=RandomSampler(train_data) if args.mlperf_bin_shuffle else None
+                )
+            else:
+                train_loader=None
             test_data = data_loader_terabyte.CriteoBinDataset(
                 data_file=test_file,
                 counts_file=counts_file,
@@ -479,17 +483,29 @@ def make_criteo_data_and_loaders(args, offset_to_length_converter=False):
         else:
             data_filename = args.raw_data_file.split("/")[-1]
 
-            train_data = CriteoDataset(
-                args.data_set,
-                args.max_ind_range,
-                args.data_sub_sample_rate,
-                args.data_randomize,
-                "train",
-                args.raw_data_file,
-                args.processed_data_file,
-                args.memory_map,
-                args.dataset_multiprocessing
-            )
+            if not inference_only:
+                train_data = CriteoDataset(
+                    args.data_set,
+                    args.max_ind_range,
+                    args.data_sub_sample_rate,
+                    args.data_randomize,
+                    "train",
+                    args.raw_data_file,
+                    args.processed_data_file,
+                    args.memory_map,
+                    args.dataset_multiprocessing
+                )
+
+                train_loader = data_loader_terabyte.DataLoader(
+                    data_directory=data_directory,
+                    data_filename=data_filename,
+                    days=list(range(23)),
+                    batch_size=args.mini_batch_size,
+                    max_ind_range=args.max_ind_range,
+                    split="train"
+                )
+            else:
+                train_loader=None
 
             test_data = CriteoDataset(
                 args.data_set,
@@ -503,15 +519,6 @@ def make_criteo_data_and_loaders(args, offset_to_length_converter=False):
                 args.dataset_multiprocessing
             )
 
-            train_loader = data_loader_terabyte.DataLoader(
-                data_directory=data_directory,
-                data_filename=data_filename,
-                days=list(range(23)),
-                batch_size=args.mini_batch_size,
-                max_ind_range=args.max_ind_range,
-                split="train"
-            )
-
             test_loader = data_loader_terabyte.DataLoader(
                 data_directory=data_directory,
                 data_filename=data_filename,
@@ -521,17 +528,34 @@ def make_criteo_data_and_loaders(args, offset_to_length_converter=False):
                 split="test"
             )
     else:
-        train_data = CriteoDataset(
-            args.data_set,
-            args.max_ind_range,
-            args.data_sub_sample_rate,
-            args.data_randomize,
-            "train",
-            args.raw_data_file,
-            args.processed_data_file,
-            args.memory_map,
-            args.dataset_multiprocessing,
-        )
+        collate_wrapper_criteo = collate_wrapper_criteo_offset
+        if offset_to_length_converter:
+            collate_wrapper_criteo = collate_wrapper_criteo_length
+        if not inference_only:
+            train_data = CriteoDataset(
+                args.data_set,
+                args.max_ind_range,
+                args.data_sub_sample_rate,
+                args.data_randomize,
+                "train",
+                args.raw_data_file,
+                args.processed_data_file,
+                args.memory_map,
+                args.dataset_multiprocessing,
+            )
+
+            train_loader = torch.utils.data.DataLoader(
+                train_data,
+                batch_size=args.mini_batch_size,
+                shuffle=False,
+                num_workers=args.num_workers,
+                collate_fn=collate_wrapper_criteo,
+                pin_memory=False,
+                drop_last=False,  # True
+            )
+        else:
+            train_data=None
+            train_loader=None
 
         test_data = CriteoDataset(
             args.data_set,
@@ -543,20 +567,6 @@ def make_criteo_data_and_loaders(args, offset_to_length_converter=False):
             args.processed_data_file,
             args.memory_map,
             args.dataset_multiprocessing,
-        )
-
-        collate_wrapper_criteo = collate_wrapper_criteo_offset
-        if offset_to_length_converter:
-            collate_wrapper_criteo = collate_wrapper_criteo_length
-
-        train_loader = torch.utils.data.DataLoader(
-            train_data,
-            batch_size=args.mini_batch_size,
-            shuffle=False,
-            num_workers=args.num_workers,
-            collate_fn=collate_wrapper_criteo,
-            pin_memory=False,
-            drop_last=False,  # True
         )
 
         test_loader = torch.utils.data.DataLoader(
@@ -630,7 +640,7 @@ class RandomDataset(Dataset):
         # torch.manual_seed(numpy_rand_seed)
 
     def __getitem__(self, index):
-
+        # t0 = time.time()
         if isinstance(index, slice):
             return [
                 self[idx] for idx in range(
@@ -645,21 +655,29 @@ class RandomDataset(Dataset):
 
         # number of data points in a batch
         n = min(self.mini_batch_size, self.data_size - (index * self.mini_batch_size))
-
         # generate a batch of dense and sparse features
         if self.data_generation == "random":
-            (X, lS_o, lS_i) = generate_dist_input_batch(
-                self.m_den,
-                self.ln_emb,
-                n,
-                self.num_indices_per_lookup,
-                self.num_indices_per_lookup_fixed,
-                rand_data_dist=self.rand_data_dist,
-                rand_data_min=self.rand_data_min,
-                rand_data_max=self.rand_data_max,
-                rand_data_mu=self.rand_data_mu,
-                rand_data_sigma=self.rand_data_sigma,
-            )
+            if self.rand_data_dist == "uniform":
+                (X, lS_o, lS_i) = generate_dist_input_batch_fast(
+                    self.m_den,
+                    self.ln_emb,
+                    n,
+                    self.num_indices_per_lookup,
+                    self.num_indices_per_lookup_fixed
+                )
+            else:
+                (X, lS_o, lS_i) = generate_dist_input_batch(
+                    self.m_den,
+                    self.ln_emb,
+                    n,
+                    self.num_indices_per_lookup,
+                    self.num_indices_per_lookup_fixed,
+                    rand_data_dist=self.rand_data_dist,
+                    rand_data_min=self.rand_data_min,
+                    rand_data_max=self.rand_data_max,
+                    rand_data_mu=self.rand_data_mu,
+                    rand_data_sigma=self.rand_data_sigma,
+                )
         elif self.data_generation == "synthetic":
             (X, lS_o, lS_i) = generate_synthetic_input_batch(
                 self.m_den,
@@ -674,10 +692,14 @@ class RandomDataset(Dataset):
             sys.exit(
                 "ERROR: --data-generation=" + self.data_generation + " is not supported"
             )
-
-        # generate a batch of target (probability of a click)
+        # t1=time.time()
+        # print("m_den={} ln_emb={} n={} idx per lookup={} idx per lookup fixed={}".format(
+        #     self.m_den, self.ln_emb, n, self.num_indices_per_lookup, self.num_indices_per_lookup_fixed))
+        # # generate a batch of target (probability of a click)
         T = generate_random_output_batch(n, self.num_targets, self.round_targets)
-
+        # print(
+        #     "Feature time: {} s; Target time: {} s".format(
+        #         t1 - t0, time.time() - t1))
         return (X, lS_o, lS_i, T)
 
     def __len__(self):
@@ -896,6 +918,52 @@ def generate_uniform_input_batch(
                 lS_batch_offsets += [sparse_group_size]
             else:
                 lS_batch_offsets += [offset]
+            lS_batch_indices += sparse_group.tolist()
+            # update offset for next iteration
+            offset += sparse_group_size
+        lS_emb_offsets.append(torch.tensor(lS_batch_offsets))
+        lS_emb_indices.append(torch.tensor(lS_batch_indices))
+
+    return (Xt, lS_emb_offsets, lS_emb_indices)
+
+
+def generate_dist_input_batch_fast(
+        m_den,
+        ln_emb,
+        n,
+        num_indices_per_lookup,
+        num_indices_per_lookup_fixed
+):
+    # dense feature
+    Xt = torch.tensor(ra.rand(n, m_den).astype(np.float32))
+
+    # sparse feature (sparse indices)
+    lS_emb_offsets = []
+    lS_emb_indices = []
+    # for each embedding generate a list of n lookups,
+    # where each lookup is composed of multiple sparse indices
+    for size in ln_emb:
+        if num_indices_per_lookup_fixed:
+            sparse_group_sizes = np.ones(n, np.int64) * num_indices_per_lookup
+        else:
+            # random between [1,num_indices_per_lookup])
+            r = ra.random(n)
+            actual_max_size = min(size, num_indices_per_lookup)
+            sparse_group_sizes = (r * actual_max_size).clip(1, actual_max_size).round().astype(np.int64)
+        total_sparse_group_size = sparse_group_sizes.sum()
+        r = ra.random(total_sparse_group_size)
+        total_sparse_group = np.round(r * (size - 1)).astype(np.int64)
+
+        lS_batch_offsets = []
+        lS_batch_indices = []
+        offset = 0
+        for i in range(n):
+            sparse_group_size = sparse_group_sizes[i]
+            sparse_group = np.unique(total_sparse_group[offset:offset + sparse_group_size])
+            # reset sparse_group_size in case some index duplicates were removed
+            sparse_group_size = np.int64(sparse_group.size)
+            # store lengths and indices
+            lS_batch_offsets += [offset]
             lS_batch_indices += sparse_group.tolist()
             # update offset for next iteration
             offset += sparse_group_size
