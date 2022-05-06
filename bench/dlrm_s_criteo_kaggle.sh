@@ -14,15 +14,15 @@ else
 fi
 echo $dlrm_extra_option
 
-dlrm_pt_bin="python dlrm_pytorch.py"
+dlrm_pt_bin="python dlrm_s_pytorch.py"
 
 echo "run pytorch ..."
 
 #Data param
 data=dataset
 data_type=kaggle
-input_path="/disk/scratch/s2189665/dlrm/input"
-output_path="/disk/scratch/s2189665/dlrm/output_original"
+input_path="./input/kaggle"
+output_path="./output"
 mkdir -p $input_path
 mkdir -p $output_path
 raw_data_file=$input_path/train.txt
@@ -45,7 +45,9 @@ sparse_size=16
 bot_mlp="13-512-256-64-16"
 top_mlp="512-256-1"
 
-
+# WARNING: the following parameters will be set based on the data set
+# --arch-embedding-size=... (sparse feature sizes)
+# --arch-mlp-bot=... (the input to the first layer of bottom mlp)
 _args="  --arch-sparse-feature-size="${sparse_size}\
 " --arch-mlp-bot="${bot_mlp}\
 " --arch-mlp-top="${top_mlp}\
@@ -68,18 +70,7 @@ _args="  --arch-sparse-feature-size="${sparse_size}\
 export CUDA_VISIBLE_DEVICES=1
 cmd="$dlrm_pt_bin $_args $dlrm_extra_option 2>&1 | tee $log_file"
 
-# WARNING: the following parameters will be set based on the data set
-# --arch-embedding-size=... (sparse feature sizes)
-# --arch-mlp-bot=... (the input to the first layer of bottom mlp)
-# cmdo="$dlrm_pt_bin --arch-sparse-feature-size=16 --arch-mlp-bot="13-512-256-64-16" --arch-mlp-top="512-256-1" --data-generation=dataset --data-set=kaggle --raw-data-file=$raw_data_file --processed-data-file=$processed_data_file --loss-function=bce --round-targets=True --learning-rate=0.1 --mini-batch-size=128 --print-freq=1024 --print-time --test-mini-batch-size=16384 --test-num-workers=16 $dlrm_extra_option 2>&1 | tee $log_file"
 echo $cmd
-# echo $cmdo
 eval $cmd
-
-# echo "run caffe2 ..."
-# WARNING: the following parameters will be set based on the data set
-# --arch-embedding-size=... (sparse feature sizes)
-# --arch-mlp-bot=... (the input to the first layer of bottom mlp)
-# $dlrm_c2_bin --arch-sparse-feature-size=16 --arch-mlp-bot="13-512-256-64-16" --arch-mlp-top="512-256-1" --data-generation=dataset --data-set=kaggle --raw-data-file=./input/train.txt --processed-data-file=./input/kaggleAdDisplayChallenge_processed.npz --loss-function=bce --round-targets=True --learning-rate=0.1 --mini-batch-size=128 --print-freq=1024 --print-time $dlrm_extra_option 2>&1 | tee run_kaggle_c2.log
 
 echo "done"
