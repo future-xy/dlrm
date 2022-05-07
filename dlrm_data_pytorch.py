@@ -459,7 +459,7 @@ def make_criteo_data_and_loaders(args, offset_to_length_converter=False):
                     sampler=RandomSampler(train_data) if args.mlperf_bin_shuffle else None
                 )
             else:
-                train_loader=None
+                train_loader = None
             test_data = data_loader_terabyte.CriteoBinDataset(
                 data_file=test_file,
                 counts_file=counts_file,
@@ -505,7 +505,7 @@ def make_criteo_data_and_loaders(args, offset_to_length_converter=False):
                     split="train"
                 )
             else:
-                train_loader=None
+                train_loader = None
 
             test_data = CriteoDataset(
                 args.data_set,
@@ -554,8 +554,8 @@ def make_criteo_data_and_loaders(args, offset_to_length_converter=False):
                 drop_last=False,  # True
             )
         else:
-            train_data=None
-            train_loader=None
+            train_data = None
+            train_loader = None
 
         test_data = CriteoDataset(
             args.data_set,
