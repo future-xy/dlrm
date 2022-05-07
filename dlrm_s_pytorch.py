@@ -339,7 +339,7 @@ class DLRM_Net(nn.Module):
             self.arch_interaction_itself = arch_interaction_itself
             self.sync_dense_params = sync_dense_params
             self.loss_threshold = loss_threshold
-            self.loss_function=loss_function
+            self.loss_function = loss_function
             if weighted_pooling is not None and weighted_pooling != "fixed":
                 self.weighted_pooling = "learned"
             else:
@@ -659,7 +659,7 @@ class DLRM_Net(nn.Module):
             else:
                 self.v_W_l = w_list
             self.parallel_model_is_not_prepared = False
-        
+
         # sw.record("prepare")
         ### prepare input (overwrite) ###
         # scatter dense features (data parallelism)
@@ -804,7 +804,7 @@ def inference_only(
             continue
 
         # forward pass
-        t0=time.time()
+        t0 = time.time()
         Z_test = dlrm_wrap(
             X_test,
             lS_o_test,
@@ -813,8 +813,8 @@ def inference_only(
             device,
             ndevices=ndevices,
         )
-        if i>0:
-            computation_latency+=time.time()-t0
+        if i > 0:
+            computation_latency += time.time()-t0
         ### gather the distributed results on each rank ###
         # For some reason it requires explicit sync before all_gather call if
         # tensor is on GPU memory
@@ -1113,8 +1113,8 @@ def run():
 
     if args.dataset_multiprocessing:
         assert float(sys.version[:3]) > 3.7, "The dataset_multiprocessing " + \
-        "flag is susceptible to a bug in Python 3.7 and under. " + \
-        "https://github.com/facebookresearch/dlrm/issues/172"
+            "flag is susceptible to a bug in Python 3.7 and under. " + \
+            "https://github.com/facebookresearch/dlrm/issues/172"
 
     if args.mlperf_logging:
         mlperf_logger.log_event(key=mlperf_logger.constants.CACHE_CLEAR, value=True)
@@ -1190,11 +1190,11 @@ def run():
         nbatches = args.num_batches if args.num_batches > 0 else len(train_ld)
         # nbatches=0
         nbatches_test = len(test_ld)
-        if args.inference_only and args.data_set == "kaggle": # Don't want to load train set
+        if args.inference_only and args.data_set == "kaggle":  # Don't want to load train set
             ln_emb = [1460, 583, 10131227, 2202608, 305, 24, 12517, 633,
-                    3, 93145, 5683, 8351593, 3194, 27, 14992, 5461306,
-                    10, 5652, 2173, 4, 7046547, 18, 15, 286181,
-                    105, 142572]
+                      3, 93145, 5683, 8351593, 3194, 27, 14992, 5461306,
+                      10, 5652, 2173, 4, 7046547, 18, 15, 286181,
+                      105, 142572]
         else:
             ln_emb = train_data.counts
         # print(ln_emb)
@@ -1387,7 +1387,7 @@ def run():
         loss_function=args.loss_function
     )
     print("Prepared model")
-    
+
     # test prints
     if args.debug_mode:
         print("initial parameters (weights and bias):")
@@ -1738,7 +1738,6 @@ def run():
                         total_computation_time = 0
                         total_communication_time = 0
                         total_time = time.time()
-                        
 
                         train_loss = total_loss / total_samp
                         total_loss = 0
@@ -1752,8 +1751,8 @@ def run():
                             wall_time = " ({})".format(time.strftime("%H:%M"))
 
                         print(
-                            "Finished {} it {}/{} of epoch {}, {:.2f} + {:.2f} != {:.2f} ms/it,".format(
-                                str_run_type, j + 1, nbatches, k, cT, gT, tT
+                            "Finished {} it {}/{} of epoch {}, {:.2f} ms/it,".format(
+                                str_run_type, j + 1, nbatches, k, tT
                             )
                             + " loss {:.6f}".format(train_loss)
                             + wall_time,
@@ -1878,20 +1877,19 @@ def run():
                 )
         else:
             print("Testing for inference only")
-            t0=time.time()
+            t0 = time.time()
             acc, computation_latency = inference_only(
                 args,
                 test_ld,
                 device,
                 use_gpu,
             )
-            total_latency=time.time()-t0
+            total_latency = time.time()-t0
             print("Inference on {} {}(s)".format(ndevices, "GPU" if args.use_gpu else "CPU"))
             print("Accuracy =", acc)
             print("# of batch = {}, batch size = {}".format(len(test_ld), args.test_mini_batch_size))
             print("{} / {} (computation / total)".format(computation_latency, total_latency))
             print("{} / {} per batch".format(computation_latency/(len(test_ld)-1), total_latency/(len(test_ld)-1)))
-
 
     # profiling
     if args.enable_profiling:
